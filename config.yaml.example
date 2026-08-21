@@ -1,0 +1,68 @@
+# ==============================================================================
+# Pylontech US2000 to Home Assistant MQTT Configuration
+# ==============================================================================
+
+# Serial connection to the Pylontech master battery console port
+serial:
+  # Serial device path:
+  #   - For Raspberry Pi Built-in GPIO UART (Pins 8/10): use "/dev/serial0" (or "/dev/ttyAMA0")
+  #   - For USB-to-RS232 adapter: use "/dev/ttyUSB0" (or /dev/serial/by-id/...)
+  port: "/dev/serial0"
+  
+  # Baudrate for Pylontech US2000 console (standard is 115200 8N1)
+  baudrate: 115200
+  
+  # Read/write command timeout in seconds
+  timeout: 3.0
+  
+  # Delay before attempting reconnection if serial cable is disconnected
+  reconnect_delay: 5.0
+
+# Polling configuration
+polling:
+  # Frequency in seconds to read real-time telemetry (pwr, cell voltages)
+  interval_seconds: 15.0
+  
+  # Frequency in seconds to refresh static device info (firmware, serial numbers)
+  info_interval_seconds: 3600.0
+  
+  # Number of battery modules in the stack (e.g. 4 for 4x US2000)
+  # Set to 0 to auto-detect from 'pwr' command output
+  battery_count: 4
+  
+  # Whether to poll 'bat <N>' for individual cell voltages and temperatures
+  read_cell_details: true
+
+# MQTT Broker configuration (Home Assistant Mosquitto broker)
+mqtt:
+  # IP address or hostname of your Raspberry Pi running HAOS (e.g. 192.168.1.50 or homeassistant.local)
+  host: "192.168.1.100"
+  
+  # MQTT Port (default 1883 for non-TLS, 8883 for TLS)
+  port: 1883
+  
+  # MQTT Username (leave null or omit if anonymous access is permitted)
+  username: "homeassistant_user"
+  
+  # MQTT Password (leave null or omit if no password)
+  password: "your_mqtt_password"
+  
+  # Base topic prefix for state telemetry
+  topic_prefix: "pylontech"
+  
+  # Home Assistant MQTT Auto-Discovery prefix (default 'homeassistant')
+  ha_discovery_prefix: "homeassistant"
+  
+  # Enable automatic registration of entities in Home Assistant
+  ha_discovery_enabled: true
+  
+  # MQTT Client ID
+  client_id: "pylontech-mqtt-pi3"
+  
+  # Use TLS for MQTT connection
+  tls: false
+
+# Logging configuration
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR
+  level: "INFO"
