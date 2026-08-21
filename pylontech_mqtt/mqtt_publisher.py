@@ -7,8 +7,10 @@ import json
 import logging
 import ssl
 import time
-from typing import Any, Dict, Optional
-import paho.mqtt.client as mqtt
+try:
+    import paho.mqtt.client as mqtt
+except ImportError:
+    mqtt = None
 
 from .config import AppConfig
 from .ha_discovery import HomeAssistantDiscovery
@@ -24,7 +26,7 @@ class MQTTPublisher:
         self.config = config
         self.mqtt_cfg = config.mqtt
         self.discovery = HomeAssistantDiscovery(config)
-        self._client: Optional[mqtt.Client] = None
+        self._client: Optional[Any] = None
         self._connected = False
         self._discovery_published = False
         self._status_topic = f"{self.mqtt_cfg.topic_prefix}/status"
@@ -35,6 +37,10 @@ class MQTTPublisher:
 
     def start(self) -> None:
         """Initialize MQTT client and connect in background loop."""
+        if mqtt is None:
+            logger.error("paho-mqtt package is not installed. Please install paho-mqtt.")
+            return
+
         logger.info(
             "Connecting to MQTT broker %s:%d (Client ID: %s)...",
             self.mqtt_cfg.host,
@@ -118,7 +124,7 @@ class MQTTPublisher:
 
     def publish_discovery(
         self,
-        battery_count: int = 4,
+        battery_count: Optional[int] = None,
         unit_infos: Optional[Dict[int, UnitInfo]] = None,
     ) -> None:
         """Publish Home Assistant discovery messages."""
@@ -128,17 +134,35 @@ class MQTTPublisher:
         if not self.mqtt_cfg.ha_discovery_enabled:
             return
 
-        logger.info("Publishing Home Assistant MQTT discovery payloads for %d batteries...", battery_count)
+        effective_count = (
+            battery_count
+            if battery_count is not None and battery_count > 0
+            else (self.config.polling.battery_count if self.config.polling.battery_count > 0 else 4)
+        )
+
+        logger.info("Publishing Home Assistant MQTT discovery payloads for %d batteries...", effective_count)
         messages = self.discovery.build_all_discovery_messages(
-            battery_count=battery_count,
+            battery_count=effective_count,
             unit_infos=unit_infos,
         )
 
         for topic, payload in messages:
             self._client.publish(topic, payload, qos=1, retain=True)
 
+        # Clear any excess orphaned discovery entities (e.g. units 5..16 if stack was resized or previously discovered as 8)
+        cleanup_messages = self.discovery.build_cleanup_discovery_messages(
+            configured_count=effective_count,
+            max_count=16,
+        )
+        for topic, empty_payload in cleanup_messages:
+            self._client.publish(topic, empty_payload, qos=1, retain=True)
+
         self._discovery_published = True
-        logger.info("Published %d Home Assistant discovery entities.", len(messages))
+        logger.info(
+            "Published %d Home Assistant discovery entities (and purged %d excess entity slots).",
+            len(messages),
+            len(cleanup_messages),
+        )
 
     def publish_telemetry(self, stack: StackTelemetry) -> None:
         """Publish real-time telemetry for stack totals and individual units."""
@@ -148,8 +172,13 @@ class MQTTPublisher:
 
         # Publish discovery once when data is first available
         if not self._discovery_published:
+            effective_count = (
+                self.config.polling.battery_count
+                if self.config.polling.battery_count > 0
+                else len(stack.unit_telemetries)
+            )
             self.publish_discovery(
-                battery_count=max(len(stack.unit_telemetries), self.config.polling.battery_count),
+                battery_count=effective_count,
                 unit_infos=stack.unit_infos,
             )
 

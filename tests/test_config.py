@@ -26,9 +26,45 @@ class TestConfig(unittest.TestCase):
             self.assertEqual(cfg.mqtt.host, "10.0.0.99")
             self.assertEqual(cfg.polling.battery_count, 6)
         finally:
-            del os.environ["PYLON_SERIAL_PORT"]
-            del os.environ["MQTT_HOST"]
-            del os.environ["PYLON_BATTERY_COUNT"]
+            os.environ.pop("PYLON_SERIAL_PORT", None)
+            os.environ.pop("MQTT_HOST", None)
+            os.environ.pop("PYLON_BATTERY_COUNT", None)
+
+    def test_battery_count_aliases(self):
+        import tempfile
+        
+        # Test 'units: 4'
+        with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as f:
+            f.write("polling:\n  units: 4\n")
+            tmp_name = f.name
+
+        try:
+            cfg = load_config(tmp_name)
+            self.assertEqual(cfg.polling.battery_count, 4)
+        finally:
+            os.remove(tmp_name)
+
+        # Test 'batteries: 3'
+        with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as f:
+            f.write("polling:\n  batteries: 3\n")
+            tmp_name = f.name
+
+        try:
+            cfg = load_config(tmp_name)
+            self.assertEqual(cfg.polling.battery_count, 3)
+        finally:
+            os.remove(tmp_name)
+
+        # Test top-level 'battery_count: 5'
+        with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as f:
+            f.write("battery_count: 5\n")
+            tmp_name = f.name
+
+        try:
+            cfg = load_config(tmp_name)
+            self.assertEqual(cfg.polling.battery_count, 5)
+        finally:
+            os.remove(tmp_name)
 
 
 if __name__ == "__main__":

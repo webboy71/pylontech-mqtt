@@ -26,29 +26,55 @@ class HomeAssistantDiscovery:
 
     def build_all_discovery_messages(
         self,
-        battery_count: int = 4,
+        battery_count: Optional[int] = None,
         unit_infos: Optional[Dict[int, UnitInfo]] = None,
         cell_count: int = 15,
     ) -> List[tuple[str, str]]:
         """
         Generate (topic, payload) pairs for all stack and unit entities.
         """
+        count = (
+            battery_count
+            if battery_count is not None and battery_count > 0
+            else (self.config.polling.battery_count if self.config.polling.battery_count > 0 else 4)
+        )
         messages: List[tuple[str, str]] = []
         infos = unit_infos or {}
 
         # 1. Master Stack Entities
-        stack_entities = self._build_stack_discovery(battery_count)
+        stack_entities = self._build_stack_discovery(count)
         for topic, payload_dict in stack_entities:
             messages.append((topic, json.dumps(payload_dict, ensure_ascii=False)))
 
-        # 2. Individual Unit Entities (1 to battery_count)
-        for unit_id in range(1, battery_count + 1):
+        # 2. Individual Unit Entities (1 to count)
+        for unit_id in range(1, count + 1):
             info = infos.get(unit_id, UnitInfo(unit_id=unit_id))
             unit_entities = self._build_unit_discovery(unit_id, info, cell_count)
             for topic, payload_dict in unit_entities:
                 messages.append((topic, json.dumps(payload_dict, ensure_ascii=False)))
 
         return messages
+
+    def build_cleanup_discovery_messages(
+        self,
+        configured_count: int,
+        max_count: int = 16,
+        cell_count: int = 15,
+    ) -> List[tuple[str, str]]:
+        """
+        Generate empty payload MQTT discovery messages (topic, "") to instruct Home Assistant
+        to remove any previously registered excess unit entities (e.g. units 5..16 when configured for 4).
+        """
+        cleanup_messages: List[tuple[str, str]] = []
+        if configured_count >= max_count:
+            return cleanup_messages
+
+        for unit_id in range(configured_count + 1, max_count + 1):
+            unit_entities = self._build_unit_discovery(unit_id, UnitInfo(unit_id=unit_id), cell_count)
+            for topic, _ in unit_entities:
+                cleanup_messages.append((topic, ""))
+
+        return cleanup_messages
 
     def _build_stack_discovery(self, battery_count: int) -> List[tuple[str, Dict[str, Any]]]:
         """Build discovery entries for the aggregated Master Stack device."""

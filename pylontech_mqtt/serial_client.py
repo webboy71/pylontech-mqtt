@@ -5,7 +5,10 @@ from __future__ import annotations
 import logging
 import time
 from typing import Dict, List, Optional
-import serial
+try:
+    import serial
+except ImportError:
+    serial = None
 
 from .config import AppConfig
 from .parser import (
@@ -29,19 +32,23 @@ class PylontechSerialClient:
         self.config = config
         self.serial_cfg = config.serial
         self.polling_cfg = config.polling
-        self._serial: Optional[serial.Serial] = None
+        self._serial: Optional[Any] = None
         self._is_connected = False
         self._unit_infos: Dict[int, UnitInfo] = {}
         self._last_info_poll_time = 0.0
 
     @property
     def is_connected(self) -> bool:
-        return self._is_connected and self._serial is not None and self._serial.is_open
+        return self._is_connected and self._serial is not None and getattr(self._serial, "is_open", False)
 
     def connect(self) -> bool:
         """Attempt to open the serial port and synchronize with the console."""
         if self.is_connected:
             return True
+
+        if serial is None:
+            logger.error("pyserial package is not installed. Please install pyserial.")
+            return False
 
         logger.info(
             "Connecting to Pylontech serial port %s at %d baud...",
@@ -136,7 +143,7 @@ class PylontechSerialClient:
             logger.debug("Command '%s' response:\n%s", cmd.strip(), full_response)
             return full_response
 
-        except (serial.SerialException, OSError) as e:
+        except (getattr(serial, "SerialException", OSError), OSError) as e:
             logger.error("Serial error while executing command '%s': %s", cmd, e)
             self._close()
             raise
@@ -157,9 +164,11 @@ class PylontechSerialClient:
 
     def refresh_all_unit_infos(self, count: int) -> Dict[int, UnitInfo]:
         """Fetch info for all units and cache them."""
+        new_infos: Dict[int, UnitInfo] = {}
         for u in range(1, count + 1):
             info = self.fetch_unit_info(u)
-            self._unit_infos[u] = info
+            new_infos[u] = info
+        self._unit_infos = new_infos
         self._last_info_poll_time = time.time()
         return self._unit_infos
 
@@ -181,10 +190,17 @@ class PylontechSerialClient:
             pwr_data = parse_pwr_output(raw_pwr)
 
             # Determine number of batteries
-            detected_count = len(pwr_data)
-            target_count = self.polling_cfg.battery_count
-            if target_count <= 0 or detected_count > target_count:
-                target_count = max(detected_count, 1)
+            if self.polling_cfg.battery_count > 0:
+                target_count = self.polling_cfg.battery_count
+            else:
+                # Auto-detection mode (battery_count <= 0)
+                present_units = [
+                    u_id
+                    for u_id, d in pwr_data.items()
+                    if d.get("voltage_v", 0.0) > 10.0
+                    or str(d.get("base_state", "")).lower() not in ("absent", "not connect", "offline", "-", "", "none")
+                ]
+                target_count = max(present_units) if present_units else max(len(pwr_data), 1)
 
             # Refresh static info if not cached or expired
             now = time.time()

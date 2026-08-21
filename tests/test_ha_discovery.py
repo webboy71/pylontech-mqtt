@@ -54,5 +54,43 @@ class TestHADiscovery(unittest.TestCase):
                 break
 
 
+        # Verify unit 5 is not present when battery_count=4
+        self.assertNotIn("homeassistant/sensor/pylontech_unit_5/voltage/config", topics)
+
+    def test_discovery_default_from_config(self):
+        config = AppConfig()
+        config.polling.battery_count = 2
+        discovery = HomeAssistantDiscovery(config)
+
+        messages = discovery.build_all_discovery_messages()
+        topics = [m[0] for m in messages]
+
+        # Should contain Unit 1 and 2
+        self.assertIn("homeassistant/sensor/pylontech_unit_1/voltage/config", topics)
+        self.assertIn("homeassistant/sensor/pylontech_unit_2/voltage/config", topics)
+        # Should not contain Unit 3 or 4
+        self.assertNotIn("homeassistant/sensor/pylontech_unit_3/voltage/config", topics)
+        self.assertNotIn("homeassistant/sensor/pylontech_unit_4/voltage/config", topics)
+
+    def test_cleanup_discovery_generation(self):
+        config = AppConfig()
+        discovery = HomeAssistantDiscovery(config)
+
+        cleanup_messages = discovery.build_cleanup_discovery_messages(configured_count=4, max_count=8)
+        self.assertGreater(len(cleanup_messages), 0)
+
+        # All payloads must be empty string
+        for topic, payload in cleanup_messages:
+            self.assertEqual(payload, "")
+
+        topics = [m[0] for m in cleanup_messages]
+        # Should contain Unit 5 through Unit 8
+        self.assertIn("homeassistant/sensor/pylontech_unit_5/voltage/config", topics)
+        self.assertIn("homeassistant/sensor/pylontech_unit_8/voltage/config", topics)
+        # Should not contain Unit 1..4
+        self.assertNotIn("homeassistant/sensor/pylontech_unit_1/voltage/config", topics)
+        self.assertNotIn("homeassistant/sensor/pylontech_unit_4/voltage/config", topics)
+
+
 if __name__ == "__main__":
     unittest.main()
