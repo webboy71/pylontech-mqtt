@@ -162,6 +162,9 @@ Dsg Cap : 4542819
 HT Cnt : 0
 LT Cnt : 0
 LV Cnt : 17416
+HV Cnt : 5
+Bat OV Times : 3
+Pwr OV Times : 1
 Command completed successfully.
 $$
 pylon>
@@ -287,6 +290,9 @@ class TestParser(unittest.TestCase):
         self.assertEqual(details["ht_count"], 0)
         self.assertEqual(details["lt_count"], 0)
         self.assertEqual(details["lv_count"], 17416)
+        self.assertEqual(details["hv_count"], 5)
+        self.assertEqual(details["bat_ov_times"], 3)
+        self.assertEqual(details["pwr_ov_times"], 1)
 
     def test_parse_soh_details(self):
         details = parse_soh_details(SAMPLE_SOH_TABLE_OUTPUT, unit_id=1)

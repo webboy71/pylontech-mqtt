@@ -293,6 +293,9 @@ class PylontechSerialClient:
                         "ht_count",
                         "lt_count",
                         "lv_count",
+                        "hv_count",
+                        "bat_ov_times",
+                        "pwr_ov_times",
                     ):
                         if stat_details.get(stat_key) is not None:
                             setattr(u_telem, stat_key, stat_details[stat_key])

@@ -41,6 +41,10 @@ class TestHADiscovery(unittest.TestCase):
         self.assertIn("homeassistant/sensor/pylontech_unit_1/discharged_capacity/config", topics)
         self.assertIn("homeassistant/sensor/pylontech_unit_1/max_charge_current/config", topics)
         self.assertIn("homeassistant/sensor/pylontech_unit_1/soh_status/config", topics)
+        self.assertIn("homeassistant/sensor/pylontech_unit_1/voltage_state/config", topics)
+        self.assertIn("homeassistant/sensor/pylontech_unit_1/hv_count/config", topics)
+        self.assertIn("homeassistant/sensor/pylontech_unit_1/bat_ov_times/config", topics)
+        self.assertIn("homeassistant/sensor/pylontech_unit_1/pwr_ov_times/config", topics)
         self.assertIn("homeassistant/binary_sensor/pylontech_unit_1/voltage_warning/config", topics)
 
         # Check Unit 4 entities
@@ -56,7 +60,14 @@ class TestHADiscovery(unittest.TestCase):
                 self.assertEqual(payload["device"]["name"], "Pylontech Battery Stack")
                 self.assertEqual(payload["availability_topic"], "pylontech/status")
                 self.assertEqual(payload["payload_available"], "online")
-                break
+            elif topic == "homeassistant/sensor/pylontech_unit_1/cell_1_voltage/config":
+                payload = json.loads(raw_payload)
+                self.assertEqual(payload["name"], "Unit 1 Cell 01 Voltage")
+                self.assertEqual(payload["entity_category"], "diagnostic")
+            elif topic == "homeassistant/sensor/pylontech_unit_1/cell_1_temperature/config":
+                payload = json.loads(raw_payload)
+                self.assertEqual(payload["name"], "Unit 1 Cell 01 Temperature")
+                self.assertEqual(payload["entity_category"], "diagnostic")
 
 
         # Verify unit 5 is not present when battery_count=4

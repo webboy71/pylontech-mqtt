@@ -446,6 +446,12 @@ class HomeAssistantDiscovery:
                 "icon": "mdi:information-outline",
             },
             {
+                "id": "voltage_state",
+                "name": "Voltage State",
+                "val_tpl": "{{ value_json.voltage_state }}",
+                "icon": "mdi:flash-alert-outline",
+            },
+            {
                 "id": "soh_status",
                 "name": "SOH Status",
                 "val_tpl": "{{ value_json.soh_status if value_json.soh_status is not none else '' }}",
@@ -532,6 +538,27 @@ class HomeAssistantDiscovery:
                 "icon": "mdi:battery-alert",
             },
             {
+                "id": "hv_count",
+                "name": "High Voltage Events",
+                "stat_cla": "total_increasing",
+                "val_tpl": "{{ value_json.hv_count if value_json.hv_count is not none else '' }}",
+                "icon": "mdi:battery-alert",
+            },
+            {
+                "id": "bat_ov_times",
+                "name": "Cell Over-Voltage Events",
+                "stat_cla": "total_increasing",
+                "val_tpl": "{{ value_json.bat_ov_times if value_json.bat_ov_times is not none else '' }}",
+                "icon": "mdi:flash-alert",
+            },
+            {
+                "id": "pwr_ov_times",
+                "name": "Pack Over-Voltage Events",
+                "stat_cla": "total_increasing",
+                "val_tpl": "{{ value_json.pwr_ov_times if value_json.pwr_ov_times is not none else '' }}",
+                "icon": "mdi:flash-alert",
+            },
+            {
                 "id": "bv_state",
                 "name": "Balance Voltage State",
                 "val_tpl": "{{ value_json.bv_state if value_json.bv_state is not none else '' }}",
@@ -572,13 +599,14 @@ class HomeAssistantDiscovery:
             c_id = f"cell_{cell_idx}_voltage"
             topic = f"{self.prefix}/sensor/{device_id}/{c_id}/config"
             payload = {
-                "name": f"Unit {unit_id} Cell {cell_idx} Voltage",
+                "name": f"Unit {unit_id} Cell {cell_idx:02d} Voltage",
                 "unique_id": f"{device_id}_{c_id}",
                 "state_topic": state_topic,
                 "value_template": f"{{{{ value_json.cell_voltages_mv[{cell_idx - 1}] if value_json.cell_voltages_mv | length >= {cell_idx} else '' }}}}",
                 "device_class": "voltage",
                 "state_class": "measurement",
                 "unit_of_measurement": "mV",
+                "entity_category": "diagnostic",
                 "icon": "mdi:battery-outline",
                 "availability_topic": self.avail_topic,
                 "payload_available": "online",
@@ -590,13 +618,14 @@ class HomeAssistantDiscovery:
             t_id = f"cell_{cell_idx}_temperature"
             t_topic = f"{self.prefix}/sensor/{device_id}/{t_id}/config"
             t_payload = {
-                "name": f"Unit {unit_id} Cell {cell_idx} Temperature",
+                "name": f"Unit {unit_id} Cell {cell_idx:02d} Temperature",
                 "unique_id": f"{device_id}_{t_id}",
                 "state_topic": state_topic,
                 "value_template": f"{{{{ value_json.cell_temperatures_c[{cell_idx - 1}] if value_json.cell_temperatures_c | length >= {cell_idx} else '' }}}}",
                 "device_class": "temperature",
                 "state_class": "measurement",
                 "unit_of_measurement": "°C",
+                "entity_category": "diagnostic",
                 "availability_topic": self.avail_topic,
                 "payload_available": "online",
                 "payload_not_available": "offline",

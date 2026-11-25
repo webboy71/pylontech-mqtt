@@ -59,6 +59,9 @@ class BatteryTelemetry:
     ht_count: Optional[int] = None
     lt_count: Optional[int] = None
     lv_count: Optional[int] = None
+    hv_count: Optional[int] = None
+    bat_ov_times: Optional[int] = None
+    pwr_ov_times: Optional[int] = None
     max_charge_current_a: Optional[float] = None
     max_discharge_current_a: Optional[float] = None
     remaining_capacity_ah: Optional[float] = None
@@ -552,6 +555,9 @@ def parse_stat_details(output: str, unit_id: int) -> Dict[str, Any]:
         ("ht_count", r"\bht\s*cnt\s*[:=]\s*(\d+)"),
         ("lt_count", r"\blt\s*cnt\s*[:=]\s*(\d+)"),
         ("lv_count", r"\blv\s*cnt\s*[:=]\s*(\d+)"),
+        ("hv_count", r"\bhv\s*cnt\s*[:=]\s*(\d+)"),
+        ("bat_ov_times", r"\bbat\s*ov\s*times\s*[:=]\s*(\d+)"),
+        ("pwr_ov_times", r"\bpwr\s*ov\s*times\s*[:=]\s*(\d+)"),
     ]
 
     for line in cleaned.splitlines():
