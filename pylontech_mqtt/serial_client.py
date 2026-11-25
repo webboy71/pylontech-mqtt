@@ -279,6 +279,16 @@ class PylontechSerialClient:
                     except Exception:
                         pass
 
+                # 5. Populate Total Capacity from cached UnitInfo Specification (or remaining/SoC fallback)
+                if u_telem.total_capacity_ah is None:
+                    unit_info = self._unit_infos.get(u_id)
+                    if unit_info and unit_info.capacity_ah is not None:
+                        u_telem.total_capacity_ah = unit_info.capacity_ah
+                    elif u_telem.remaining_capacity_ah is not None and u_telem.soc_percent > 0:
+                        u_telem.total_capacity_ah = round(
+                            u_telem.remaining_capacity_ah / (u_telem.soc_percent / 100.0), 2
+                        )
+
                 telemetries[u_id] = u_telem
 
             # Aggregate into master stack

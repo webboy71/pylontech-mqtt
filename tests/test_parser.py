@@ -96,6 +96,7 @@ Boot  version       : V1.2
 Comm version        : V2.0
 Serial Number       : PPTA012345678901
 Barcode             : PPTA012345678901
+Specification       : 48V/50AH
 Command completed successfully
 $$
 pylon>
@@ -242,6 +243,7 @@ class TestParser(unittest.TestCase):
         self.assertEqual(info.serial_number, "PPTA012345678901")
         self.assertEqual(info.firmware_version, "B65.12")
         self.assertEqual(info.board_version, "PHOB01_V2.8")
+        self.assertEqual(info.capacity_ah, 50.0)
 
     def test_parse_soh_output(self):
         soh = parse_soh_output(SAMPLE_SOH_OUTPUT, unit_id=1)

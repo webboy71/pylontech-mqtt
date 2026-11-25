@@ -174,6 +174,37 @@ $$
         self.assertEqual(telemetry.unit_telemetries[1].cycle_count, 87)
         self.assertEqual(telemetry.unit_telemetries[1].cell_voltages_mv, [3328.0, 3329.0])
 
+    def test_populates_total_capacity_from_info_specification(self):
+        """When bat <id> does not report Total Coulomb, total_capacity_ah is taken from info Specification."""
+        bat_table = """
+@
+Battery  Volt   Curr   Tempr  Base State  Volt. State  Curr. State  Temp. State  Coulomb
+0        3328   -1250  23000  Dischg      Normal       Normal       Normal       98%     49000 mAH
+Command completed successfully
+$$
+"""
+        info_with_spec = SAMPLE_INFO_OUTPUT + "\nSpecification       : 48V/50AH\n"
+
+        def mock_send_command(cmd: str, timeout=None):
+            if cmd == "pwr":
+                return SAMPLE_PWR_8_UNITS
+            elif cmd.startswith("bat "):
+                return bat_table
+            elif cmd.startswith("info"):
+                return info_with_spec
+            elif cmd.startswith("soh "):
+                return "SOH: 99%\n$$"
+            elif cmd.startswith("stat "):
+                return "CYCLE Times : 87\n$$"
+            return "$$"
+
+        self.client.send_command = mock_send_command
+
+        telemetry = self.client.poll_telemetry()
+        self.assertIsNotNone(telemetry)
+        self.assertEqual(telemetry.unit_telemetries[1].total_capacity_ah, 50.0)
+        self.assertEqual(telemetry.total_capacity_ah, 200.0)
+
 
 if __name__ == "__main__":
     unittest.main()

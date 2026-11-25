@@ -16,6 +16,7 @@ class UnitInfo:
     firmware_version: str = "Unknown"
     board_version: str = "Unknown"
     barcode: str = "Unknown"
+    capacity_ah: Optional[float] = None
 
 
 @dataclass
@@ -396,6 +397,10 @@ def parse_info_output(output: str, unit_id: int) -> UnitInfo:
             info.firmware_version = val
         elif "board version" in key or "hardware" in key:
             info.board_version = val
+        elif "specification" in key:
+            m_cap = re.search(r"(\d+(?:\.\d+)?)\s*AH\b", val, re.IGNORECASE)
+            if m_cap:
+                info.capacity_ah = float(m_cap.group(1))
 
     return info
 
