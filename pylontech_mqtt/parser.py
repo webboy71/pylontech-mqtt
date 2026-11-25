@@ -218,6 +218,8 @@ def _normalize_pwr_row(row: Dict[str, Any], unit_id: int) -> Dict[str, Any]:
 def parse_bat_output(output: str, unit_id: int) -> Dict[str, Any]:
     """
     Parse the output of the 'bat <unit_id>' command.
+    Supports both the standard Pylontech table format (one row per cell 0..14)
+    and key-value summary formats.
     Extracts individual cell voltages (mV), cell temperatures (°C),
     BMS temp, coulomb counts, cycle counts, SOH.
     """
@@ -228,11 +230,73 @@ def parse_bat_output(output: str, unit_id: int) -> Dict[str, Any]:
         "cell_temperatures_c": [],
     }
 
+    table_header_found = False
+    volt_col_idx = 1
+    tempr_col_idx = 3
+
     for line in cleaned.splitlines():
         line = line.strip()
-        if not line or line.startswith("@") or line.startswith("$$") or "pylon>" in line:
+        if not line or line.startswith("@") or line.startswith("$$") or "pylon>" in line or "Command completed" in line:
             continue
 
+        # Detect table header for standard Pylontech 'bat <id>' output:
+        # e.g. "Battery  Volt   Curr   Tempr  Base State  Volt. State  Curr. State  Temp. State  Coulomb"
+        # or   "Battery | Volt | Curr | Tempr | Base.St | ..."
+        if "|" in line:
+            tokens = [t.strip() for t in line.split("|") if t.strip()]
+        else:
+            tokens = [t.strip() for t in line.split() if t.strip()]
+
+        lower_tokens = [t.lower() for t in tokens]
+        if (
+            not table_header_found
+            and ":" not in line
+            and any(h in lower_tokens for h in ["battery", "cell"])
+            and "volt" in lower_tokens
+        ):
+            table_header_found = True
+            volt_col_idx = lower_tokens.index("volt")
+            if "tempr" in lower_tokens:
+                tempr_col_idx = lower_tokens.index("tempr")
+            elif "temp" in lower_tokens:
+                tempr_col_idx = lower_tokens.index("temp")
+            continue
+
+        # Parse table data rows (first token is cell index 0..14)
+        if table_header_found and tokens and tokens[0].isdigit():
+            if len(tokens) > volt_col_idx:
+                try:
+                    v_mv = float(re.sub(r"[^\d.-]", "", tokens[volt_col_idx]))
+                    result["cell_voltages_mv"].append(v_mv)
+                except ValueError:
+                    pass
+
+            if len(tokens) > tempr_col_idx:
+                try:
+                    t_raw = float(re.sub(r"[^\d.-]", "", tokens[tempr_col_idx]))
+                    result["cell_temperatures_c"].append(
+                        round(t_raw / 1000.0 if abs(t_raw) > 1000 else t_raw, 1)
+                    )
+                except ValueError:
+                    pass
+
+            # Extract SoC (%) and remaining capacity (mAH) if present in row
+            if "soc_percent" not in result:
+                for tok in tokens[4:]:
+                    if "%" in tok:
+                        try:
+                            result["soc_percent"] = float(re.sub(r"[^\d.-]", "", tok))
+                            break
+                        except ValueError:
+                            pass
+
+            if "remaining_capacity_ah" not in result:
+                m_cap = re.search(r"(\d+)\s*mAH\b", line, re.IGNORECASE)
+                if m_cap:
+                    result["remaining_capacity_ah"] = round(float(m_cap.group(1)) / 1000.0, 2)
+            continue
+
+        # Key-value format fallbacks:
         # Cell Voltages: e.g. "Cell Volt: 3328 3329 3330 3329 ..." or "Cell Volt(mV): ..."
         if re.search(r"Cell\s+Volt", line, re.IGNORECASE):
             parts = re.split(r"[:=]", line, maxsplit=1)

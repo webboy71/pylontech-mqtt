@@ -50,6 +50,39 @@ $$
 pylon>
 """
 
+SAMPLE_BAT_TABLE_OUTPUT = """
+@
+Battery  Volt   Curr   Tempr  Base State  Volt. State  Curr. State  Temp. State  Coulomb
+0        3328   -1250  23000  Dischg      Normal       Normal       Normal       98%     49000 mAH
+1        3329   -1250  23000  Dischg      Normal       Normal       Normal       98%     49000 mAH
+2        3330   -1250  23000  Dischg      Normal       Normal       Normal       98%     49000 mAH
+3        3329   -1250  23000  Dischg      Normal       Normal       Normal       98%     49000 mAH
+4        3331   -1250  23000  Dischg      Normal       Normal       Normal       98%     49000 mAH
+5        3329   -1250  23000  Dischg      Normal       Normal       Normal       98%     49000 mAH
+6        3330   -1250  23000  Dischg      Normal       Normal       Normal       98%     49000 mAH
+7        3331   -1250  23000  Dischg      Normal       Normal       Normal       98%     49000 mAH
+8        3328   -1250  23000  Dischg      Normal       Normal       Normal       98%     49000 mAH
+9        3329   -1250  23000  Dischg      Normal       Normal       Normal       98%     49000 mAH
+10       3330   -1250  23000  Dischg      Normal       Normal       Normal       98%     49000 mAH
+11       3329   -1250  23000  Dischg      Normal       Normal       Normal       98%     49000 mAH
+12       3331   -1250  23000  Dischg      Normal       Normal       Normal       98%     49000 mAH
+13       3329   -1250  23000  Dischg      Normal       Normal       Normal       98%     49000 mAH
+14       3330   -1250  23000  Dischg      Normal       Normal       Normal       98%     49000 mAH
+Command completed successfully
+$$
+pylon>
+"""
+
+SAMPLE_BAT_PIPE_TABLE_OUTPUT = """
+@
+Battery | Volt | Curr | Tempr | Base.St | Volt.St | Curr.St | Temp.St | Coulomb
+0       | 3340 | 2500 | 25000 | Charge  | Normal  | Normal  | Normal  | 75%
+1       | 3345 | 2500 | 25000 | Charge  | Normal  | Normal  | Normal  | 75%
+Command completed successfully
+$$
+pylon>
+"""
+
 SAMPLE_INFO_OUTPUT = """
 @
 Device address      : 1
@@ -127,6 +160,31 @@ class TestParser(unittest.TestCase):
         self.assertEqual(result["volt_low_mv"], 3328.0)
         self.assertEqual(result["volt_high_mv"], 3331.0)
         self.assertEqual(result["cell_delta_mv"], 3.0)
+
+    def test_parse_bat_table_output(self):
+        result = parse_bat_output(SAMPLE_BAT_TABLE_OUTPUT, unit_id=1)
+        self.assertEqual(result["unit_id"], 1)
+        self.assertEqual(len(result["cell_voltages_mv"]), 15)
+        self.assertEqual(result["cell_voltages_mv"][0], 3328.0)
+        self.assertEqual(result["cell_voltages_mv"][4], 3331.0)
+        self.assertEqual(result["cell_voltages_mv"][14], 3330.0)
+        self.assertEqual(len(result["cell_temperatures_c"]), 15)
+        self.assertEqual(result["cell_temperatures_c"][0], 23.0)
+        self.assertEqual(result["soc_percent"], 98.0)
+        self.assertEqual(result["remaining_capacity_ah"], 49.0)
+        self.assertEqual(result["volt_low_mv"], 3328.0)
+        self.assertEqual(result["volt_high_mv"], 3331.0)
+        self.assertEqual(result["cell_delta_mv"], 3.0)
+
+    def test_parse_bat_pipe_table_output(self):
+        result = parse_bat_output(SAMPLE_BAT_PIPE_TABLE_OUTPUT, unit_id=2)
+        self.assertEqual(result["unit_id"], 2)
+        self.assertEqual(result["cell_voltages_mv"], [3340.0, 3345.0])
+        self.assertEqual(result["cell_temperatures_c"], [25.0, 25.0])
+        self.assertEqual(result["soc_percent"], 75.0)
+        self.assertEqual(result["volt_low_mv"], 3340.0)
+        self.assertEqual(result["volt_high_mv"], 3345.0)
+        self.assertEqual(result["cell_delta_mv"], 5.0)
 
     def test_parse_info_output(self):
         info = parse_info_output(SAMPLE_INFO_OUTPUT, unit_id=1)
