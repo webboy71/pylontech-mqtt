@@ -136,6 +136,44 @@ class TestSerialClientBatteryCount(unittest.TestCase):
         self.assertEqual(len(telemetry.unit_telemetries), 4)
         self.assertNotIn(5, telemetry.unit_telemetries)
 
+    def test_fetches_cycle_count_from_stat_when_bat_returns_table(self):
+        """When bat <id> returns a cell table without Cycle, poll_telemetry queries stat <id>."""
+        bat_table = """
+@
+Battery  Volt   Curr   Tempr  Base State  Volt. State  Curr. State  Temp. State  Coulomb
+0        3328   -1250  23000  Dischg      Normal       Normal       Normal       98%
+1        3329   -1250  23000  Dischg      Normal       Normal       Normal       98%
+Command completed successfully
+$$
+"""
+        stat_output = """
+@
+Device address 1.
+CYCLE Times : 87
+Command completed successfully.
+$$
+"""
+
+        def mock_send_command(cmd: str, timeout=None):
+            if cmd == "pwr":
+                return SAMPLE_PWR_8_UNITS
+            elif cmd.startswith("bat "):
+                return bat_table
+            elif cmd.startswith("info"):
+                return SAMPLE_INFO_OUTPUT
+            elif cmd.startswith("soh "):
+                return "SOH: 99%\n$$"
+            elif cmd.startswith("stat "):
+                return stat_output
+            return "$$"
+
+        self.client.send_command = mock_send_command
+
+        telemetry = self.client.poll_telemetry()
+        self.assertIsNotNone(telemetry)
+        self.assertEqual(telemetry.unit_telemetries[1].cycle_count, 87)
+        self.assertEqual(telemetry.unit_telemetries[1].cell_voltages_mv, [3328.0, 3329.0])
+
 
 if __name__ == "__main__":
     unittest.main()

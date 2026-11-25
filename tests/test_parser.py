@@ -9,6 +9,7 @@ from pylontech_mqtt.parser import (
     parse_info_output,
     parse_pwr_output,
     parse_soh_output,
+    parse_stat_output,
 )
 
 SAMPLE_PWR_OUTPUT = """
@@ -110,6 +111,30 @@ $$
 pylon>
 """
 
+SAMPLE_STAT_OUTPUT = """
+@
+Device address 1.
+Data Items : 628
+HisData Items : 2044
+Charge Cnt. : 0
+Discharge Cnt. : 761
+Charge Times : 35859
+Status Cnt. : 760
+Idle Times : 38704
+COC Times : 0
+DOC Times : 0
+COCA Times : 0
+DOCA Times : 0
+SC Times : 0
+CYCLE Times : 142
+Pwr Percent : 67
+Pwr Coulomb : 120297600
+Dsg Cap : 4542819
+Command completed successfully.
+$$
+pylon>
+"""
+
 
 class TestParser(unittest.TestCase):
 
@@ -198,6 +223,10 @@ class TestParser(unittest.TestCase):
     def test_parse_soh_output(self):
         soh = parse_soh_output(SAMPLE_SOH_OUTPUT, unit_id=1)
         self.assertEqual(soh, 99.0)
+
+    def test_parse_stat_output(self):
+        cycles = parse_stat_output(SAMPLE_STAT_OUTPUT, unit_id=1)
+        self.assertEqual(cycles, 142)
 
     def test_aggregate_stack_telemetry(self):
         pwr_data = parse_pwr_output(SAMPLE_PWR_OUTPUT)

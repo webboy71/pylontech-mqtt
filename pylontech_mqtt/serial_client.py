@@ -20,6 +20,7 @@ from .parser import (
     parse_info_output,
     parse_pwr_output,
     parse_soh_output,
+    parse_stat_output,
 )
 
 logger = logging.getLogger(__name__)
@@ -265,6 +266,16 @@ class PylontechSerialClient:
                         soh_val = parse_soh_output(raw_soh, u_id)
                         if soh_val is not None:
                             u_telem.soh_percent = soh_val
+                    except Exception:
+                        pass
+
+                # 4. Fetch Cycle Count via 'stat <id>' if not already populated
+                if u_telem.cycle_count is None:
+                    try:
+                        raw_stat = self.send_command(f"stat {u_id}")
+                        cycle_val = parse_stat_output(raw_stat, u_id)
+                        if cycle_val is not None:
+                            u_telem.cycle_count = cycle_val
                     except Exception:
                         pass
 

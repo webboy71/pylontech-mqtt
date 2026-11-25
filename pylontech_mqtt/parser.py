@@ -419,6 +419,20 @@ def parse_soh_output(output: str, unit_id: int) -> Optional[float]:
     return None
 
 
+def parse_stat_output(output: str, unit_id: int) -> Optional[int]:
+    """Parse output of 'stat <unit_id>' command, returning cycle count int or None."""
+    cleaned = clean_console_text(output)
+    for line in cleaned.splitlines():
+        line_stripped = line.strip()
+        if not line_stripped or line_stripped.startswith("@") or line_stripped.startswith("$$") or "pylon>" in line_stripped:
+            continue
+        # Match 'CYCLE Times : 11', 'Cycle count: 142', 'Cycles: 142', or 'Cycle: 142'
+        m = re.search(r"\bcycle(?:\s*times|\s*count|s)?\s*[:=]\s*(\d+)", line_stripped, re.IGNORECASE)
+        if m:
+            return int(m.group(1))
+    return None
+
+
 
 def aggregate_stack_telemetry(
     unit_telemetries: Dict[int, BatteryTelemetry],
