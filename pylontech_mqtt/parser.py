@@ -17,6 +17,11 @@ class UnitInfo:
     board_version: str = "Unknown"
     barcode: str = "Unknown"
     capacity_ah: Optional[float] = None
+    max_charge_current_a: Optional[float] = None
+    max_discharge_current_a: Optional[float] = None
+    cell_count: Optional[int] = None
+    boot_version: str = "Unknown"
+    comm_version: str = "Unknown"
 
 
 @dataclass
@@ -33,12 +38,29 @@ class BatteryTelemetry:
     cell_delta_mv: float = 0.0
     soc_percent: float = 0.0
     soh_percent: Optional[float] = None
+    soh_status: Optional[str] = None
+    soh_abnormal_cells: Optional[int] = None
     base_state: str = "Idle"
     voltage_state: str = "Normal"
     current_state: str = "Normal"
     temp_state: str = "Normal"
     coulomb_state: str = "Normal"
+    bv_state: Optional[str] = None
+    bt_state: Optional[str] = None
+    lc_state: Optional[str] = None
+    battery_time: Optional[str] = None
     cycle_count: Optional[int] = None
+    charge_count: Optional[int] = None
+    discharge_count: Optional[int] = None
+    discharged_capacity_ah: Optional[float] = None
+    coc_times: Optional[int] = None
+    doc_times: Optional[int] = None
+    sc_times: Optional[int] = None
+    ht_count: Optional[int] = None
+    lt_count: Optional[int] = None
+    lv_count: Optional[int] = None
+    max_charge_current_a: Optional[float] = None
+    max_discharge_current_a: Optional[float] = None
     remaining_capacity_ah: Optional[float] = None
     total_capacity_ah: Optional[float] = None
     cell_voltages_mv: List[float] = field(default_factory=list)
@@ -125,16 +147,26 @@ def parse_pwr_output(output: str) -> Dict[int, Dict[str, Any]]:
                 for h, val in zip(headers, tokens):
                     row_data[h] = val
             else:
-                # Fallback standard positional mapping for standard US2000 'pwr' format:
-                # [0:Power/Index, 1:Volt, 2:Curr, 3:Tempr, 4:Tlow, 5:Thigh, 6:Vlow, 7:Vhigh,
-                #  8:Base.St, 9:Volt.St, 10:Curr.St, 11:Temp.St, 12:Coulmb.St/SoC, 13:Coulomb...]
-                positional_keys = [
-                    "power", "volt", "curr", "tempr", "tlow", "thigh", "vlow", "vhigh",
-                    "base.st", "volt.st", "curr.st", "temp.st", "coulmb.st", "coulomb"
-                ]
-                for idx, key in enumerate(positional_keys):
-                    if idx < len(tokens):
-                        row_data[key] = tokens[idx]
+                # Handle space-delimited 'Time' column (YYYY-MM-DD HH:MM:SS) splitting into 2 tokens
+                merged_tokens = list(tokens)
+                if "time" in headers:
+                    t_idx = headers.index("time")
+                    if t_idx + 1 < len(merged_tokens) and re.match(r"^\d{4}-\d{2}-\d{2}$", merged_tokens[t_idx]) and re.match(r"^\d{2}:\d{2}:\d{2}$", merged_tokens[t_idx + 1]):
+                        merged_tokens[t_idx] = f"{merged_tokens[t_idx]} {merged_tokens[t_idx + 1]}"
+                        del merged_tokens[t_idx + 1]
+
+                if len(merged_tokens) == len(headers):
+                    for h, val in zip(headers, merged_tokens):
+                        row_data[h] = val
+                else:
+                    # Fallback standard positional mapping for standard US2000 'pwr' format:
+                    positional_keys = [
+                        "power", "volt", "curr", "tempr", "tlow", "thigh", "vlow", "vhigh",
+                        "base.st", "volt.st", "curr.st", "temp.st", "coulmb.st", "coulomb"
+                    ]
+                    for idx, key in enumerate(positional_keys):
+                        if idx < len(merged_tokens):
+                            row_data[key] = merged_tokens[idx]
 
             # Convert and normalize values
             data = _normalize_pwr_row(row_data, unit_id)
@@ -212,6 +244,16 @@ def _normalize_pwr_row(row: Dict[str, Any], unit_id: int) -> Dict[str, Any]:
     result["current_state"] = str(row.get("curr.st", "Normal")).capitalize()
     result["temp_state"] = str(row.get("temp.st", "Normal")).capitalize()
     result["coulomb_state"] = str(row.get("coulmb.st", "Normal")).capitalize()
+    if "b.v.st" in row and str(row["b.v.st"]) not in ("-", ""):
+        result["bv_state"] = str(row["b.v.st"]).capitalize()
+    if "b.t.st" in row and str(row["b.t.st"]) not in ("-", ""):
+        result["bt_state"] = str(row["b.t.st"]).capitalize()
+    if "b.t.st." in row and "bt_state" not in result and str(row["b.t.st."]) not in ("-", ""):
+        result["bt_state"] = str(row["b.t.st."]).capitalize()
+    if "lc.st" in row and str(row["lc.st"]) not in ("-", ""):
+        result["lc_state"] = str(row["lc.st"]).upper()
+    if "time" in row and str(row["time"]) not in ("-", ""):
+        result["battery_time"] = str(row["time"])
 
     return result
 
@@ -395,8 +437,26 @@ def parse_info_output(output: str, unit_id: int) -> UnitInfo:
                 info.serial_number = val
         elif "main soft version" in key or "firmware" in key:
             info.firmware_version = val
+        elif "boot" in key and "version" in key:
+            info.boot_version = val
+        elif "comm" in key and "version" in key:
+            info.comm_version = val
         elif "board version" in key or "hardware" in key:
             info.board_version = val
+        elif "cell number" in key:
+            m_cells = re.search(r"(\d+)", val)
+            if m_cells:
+                info.cell_count = int(m_cells.group(1))
+        elif "max" in key and ("dischg" in key or "discharge" in key or "dsg" in key) and "curr" in key:
+            m_curr = re.search(r"([-+]?\d+(?:\.\d+)?)", val)
+            if m_curr:
+                c_val = float(m_curr.group(1))
+                info.max_discharge_current_a = round(c_val / 1000.0 if abs(c_val) > 100 else c_val, 2)
+        elif "max" in key and ("charge" in key or "chg" in key) and "curr" in key:
+            m_curr = re.search(r"([-+]?\d+(?:\.\d+)?)", val)
+            if m_curr:
+                c_val = float(m_curr.group(1))
+                info.max_charge_current_a = round(c_val / 1000.0 if abs(c_val) > 100 else c_val, 2)
         elif "specification" in key:
             m_cap = re.search(r"(\d+(?:\.\d+)?)\s*AH\b", val, re.IGNORECASE)
             if m_cap:
@@ -405,11 +465,12 @@ def parse_info_output(output: str, unit_id: int) -> UnitInfo:
     return info
 
 
-def parse_soh_output(output: str, unit_id: int) -> Optional[float]:
+def parse_soh_details(output: str, unit_id: int) -> Dict[str, Any]:
     """
-    Parse output of 'soh <unit_id>' command, returning SOH float (0..100) or None.
-    Supports both key-value ('SOH: 99%') and Pylontech cell-table format
-    ('Battery  Voltage  SOHCount  SOHStatus').
+    Parse output of 'soh <unit_id>' command, returning a dict with:
+    - soh_percent: float (0..100) if available
+    - soh_status: str ('Normal' / 'Abnormal') if cell table is present
+    - soh_abnormal_cells: int count of non-Normal cells if cell table is present
     """
     cleaned = clean_console_text(output)
     table_header_found = False
@@ -427,17 +488,16 @@ def parse_soh_output(output: str, unit_id: int) -> Optional[float]:
         if m:
             val = float(m.group(1))
             if 0 <= val <= 100:
-                return val
+                return {"soh_percent": val}
         # Also check for 'SOH 99%' pattern
         m2 = re.search(r"\bsoh\b.*?(\d+)%", line_stripped, re.IGNORECASE)
         if m2 and not line_stripped.lower().startswith("soh "):
             val = float(m2.group(1))
             if 0 <= val <= 100:
-                return val
+                return {"soh_percent": val}
 
         # Detect Pylontech 'soh <id>' table header:
         # e.g. "Power 1. Battery  Voltage  SOHCount  SOHStatus"
-        # or   "Battery | Voltage | SOHCount | SOHStatus"
         if "|" in line_stripped:
             tokens = [t.strip() for t in line_stripped.split("|") if t.strip()]
         else:
@@ -446,8 +506,6 @@ def parse_soh_output(output: str, unit_id: int) -> Optional[float]:
         lower_tokens = [t.lower() for t in tokens]
         if not table_header_found and "sohstatus" in lower_tokens:
             table_header_found = True
-            # On data rows, columns are [cell_idx, voltage, soh_count, soh_status]
-            # Header may have leading "Power 1." prefix, so find offset from "battery"
             if "battery" in lower_tokens:
                 bat_idx = lower_tokens.index("battery")
                 status_col_idx = lower_tokens.index("sohstatus") - bat_idx
@@ -462,22 +520,62 @@ def parse_soh_output(output: str, unit_id: int) -> Optional[float]:
                     normal_cells += 1
 
     if total_cells > 0:
-        return round(100.0 * normal_cells / total_cells, 1)
-    return None
+        abnormal_cells = total_cells - normal_cells
+        return {
+            "soh_percent": round(100.0 * normal_cells / total_cells, 1),
+            "soh_status": "Normal" if abnormal_cells == 0 else "Abnormal",
+            "soh_abnormal_cells": abnormal_cells,
+        }
+    return {}
 
 
-def parse_stat_output(output: str, unit_id: int) -> Optional[int]:
-    """Parse output of 'stat <unit_id>' command, returning cycle count int or None."""
+def parse_soh_output(output: str, unit_id: int) -> Optional[float]:
+    """Parse output of 'soh <unit_id>' command, returning SOH float (0..100) or None."""
+    return parse_soh_details(output, unit_id).get("soh_percent")
+
+
+def parse_stat_details(output: str, unit_id: int) -> Dict[str, Any]:
+    """
+    Parse output of 'stat <unit_id>' command, extracting cycle count,
+    charge/discharge counts, lifetime discharged capacity (Ah), and event counters.
+    """
     cleaned = clean_console_text(output)
+    details: Dict[str, Any] = {}
+
+    patterns = [
+        ("cycle_count", r"\bcycle(?:\s*times|\s*count|s)?\s*[:=]\s*(\d+)"),
+        ("charge_count", r"\bcharge\s*cnt\.?\s*[:=]\s*(\d+)"),
+        ("discharge_count", r"\bdischarge\s*cnt\.?\s*[:=]\s*(\d+)"),
+        ("coc_times", r"\bcoc\s*times\s*[:=]\s*(\d+)"),
+        ("doc_times", r"\bdoc\s*times\s*[:=]\s*(\d+)"),
+        ("sc_times", r"\bsc\s*times\s*[:=]\s*(\d+)"),
+        ("ht_count", r"\bht\s*cnt\s*[:=]\s*(\d+)"),
+        ("lt_count", r"\blt\s*cnt\s*[:=]\s*(\d+)"),
+        ("lv_count", r"\blv\s*cnt\s*[:=]\s*(\d+)"),
+    ]
+
     for line in cleaned.splitlines():
         line_stripped = line.strip()
         if not line_stripped or line_stripped.startswith("@") or line_stripped.startswith("$$") or "pylon>" in line_stripped:
             continue
-        # Match 'CYCLE Times : 11', 'Cycle count: 142', 'Cycles: 142', or 'Cycle: 142'
-        m = re.search(r"\bcycle(?:\s*times|\s*count|s)?\s*[:=]\s*(\d+)", line_stripped, re.IGNORECASE)
-        if m:
-            return int(m.group(1))
-    return None
+
+        for key, pat in patterns:
+            m = re.search(pat, line_stripped, re.IGNORECASE)
+            if m:
+                details[key] = int(m.group(1))
+                break
+        else:
+            m_dsg = re.search(r"\bdsg\s*cap\s*[:=]\s*(\d+)", line_stripped, re.IGNORECASE)
+            if m_dsg:
+                # Dsg Cap is reported in mAh -> convert to Ah
+                details["discharged_capacity_ah"] = round(float(m_dsg.group(1)) / 1000.0, 2)
+
+    return details
+
+
+def parse_stat_output(output: str, unit_id: int) -> Optional[int]:
+    """Parse output of 'stat <unit_id>' command, returning cycle count int or None."""
+    return parse_stat_details(output, unit_id).get("cycle_count")
 
 
 

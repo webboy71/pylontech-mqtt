@@ -19,8 +19,8 @@ from .parser import (
     parse_bat_output,
     parse_info_output,
     parse_pwr_output,
-    parse_soh_output,
-    parse_stat_output,
+    parse_soh_details,
+    parse_stat_details,
 )
 
 logger = logging.getLogger(__name__)
@@ -232,6 +232,10 @@ class PylontechSerialClient:
                     current_state=row_dict.get("current_state", "Normal"),
                     temp_state=row_dict.get("temp_state", "Normal"),
                     coulomb_state=row_dict.get("coulomb_state", "Normal"),
+                    bv_state=row_dict.get("bv_state"),
+                    bt_state=row_dict.get("bt_state"),
+                    lc_state=row_dict.get("lc_state"),
+                    battery_time=row_dict.get("battery_time"),
                     last_update=now,
                 )
 
@@ -259,29 +263,50 @@ class PylontechSerialClient:
                     except Exception as e:
                         logger.warning("Error reading 'bat %d': %s", u_id, e)
 
-                # 3. Fetch SOH if not already populated
-                if u_telem.soh_percent is None:
+                # 3. Fetch SOH details if not already populated
+                if u_telem.soh_percent is None or u_telem.soh_status is None:
                     try:
                         raw_soh = self.send_command(f"soh {u_id}")
-                        soh_val = parse_soh_output(raw_soh, u_id)
-                        if soh_val is not None:
-                            u_telem.soh_percent = soh_val
+                        soh_details = parse_soh_details(raw_soh, u_id)
+                        if u_telem.soh_percent is None and soh_details.get("soh_percent") is not None:
+                            u_telem.soh_percent = soh_details["soh_percent"]
+                        if soh_details.get("soh_status") is not None:
+                            u_telem.soh_status = soh_details["soh_status"]
+                        if soh_details.get("soh_abnormal_cells") is not None:
+                            u_telem.soh_abnormal_cells = soh_details["soh_abnormal_cells"]
                     except Exception:
                         pass
 
-                # 4. Fetch Cycle Count via 'stat <id>' if not already populated
-                if u_telem.cycle_count is None:
-                    try:
-                        raw_stat = self.send_command(f"stat {u_id}")
-                        cycle_val = parse_stat_output(raw_stat, u_id)
-                        if cycle_val is not None:
-                            u_telem.cycle_count = cycle_val
-                    except Exception:
-                        pass
+                # 4. Fetch Cycle Count & Statistics via 'stat <id>'
+                try:
+                    raw_stat = self.send_command(f"stat {u_id}")
+                    stat_details = parse_stat_details(raw_stat, u_id)
+                    if u_telem.cycle_count is None and stat_details.get("cycle_count") is not None:
+                        u_telem.cycle_count = stat_details["cycle_count"]
+                    for stat_key in (
+                        "charge_count",
+                        "discharge_count",
+                        "discharged_capacity_ah",
+                        "coc_times",
+                        "doc_times",
+                        "sc_times",
+                        "ht_count",
+                        "lt_count",
+                        "lv_count",
+                    ):
+                        if stat_details.get(stat_key) is not None:
+                            setattr(u_telem, stat_key, stat_details[stat_key])
+                except Exception:
+                    pass
 
-                # 5. Populate Total Capacity from cached UnitInfo Specification (or remaining/SoC fallback)
+                # 5. Populate Total Capacity & Current Limits from cached UnitInfo
+                unit_info = self._unit_infos.get(u_id)
+                if unit_info:
+                    if unit_info.max_charge_current_a is not None:
+                        u_telem.max_charge_current_a = unit_info.max_charge_current_a
+                    if unit_info.max_discharge_current_a is not None:
+                        u_telem.max_discharge_current_a = unit_info.max_discharge_current_a
                 if u_telem.total_capacity_ah is None:
-                    unit_info = self._unit_infos.get(u_id)
                     if unit_info and unit_info.capacity_ah is not None:
                         u_telem.total_capacity_ah = unit_info.capacity_ah
                     elif u_telem.remaining_capacity_ah is not None and u_telem.soc_percent > 0:

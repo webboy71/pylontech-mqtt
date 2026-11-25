@@ -49,7 +49,8 @@ class HomeAssistantDiscovery:
         # 2. Individual Unit Entities (1 to count)
         for unit_id in range(1, count + 1):
             info = infos.get(unit_id, UnitInfo(unit_id=unit_id))
-            unit_entities = self._build_unit_discovery(unit_id, info, cell_count)
+            unit_cell_count = info.cell_count if info.cell_count and info.cell_count > 0 else cell_count
+            unit_entities = self._build_unit_discovery(unit_id, info, unit_cell_count)
             for topic, payload_dict in unit_entities:
                 messages.append((topic, json.dumps(payload_dict, ensure_ascii=False)))
 
@@ -438,6 +439,110 @@ class HomeAssistantDiscovery:
                 "val_tpl": "{{ value_json.base_state }}",
                 "icon": "mdi:information-outline",
             },
+            {
+                "id": "coulomb_state",
+                "name": "Coulomb State",
+                "val_tpl": "{{ value_json.coulomb_state }}",
+                "icon": "mdi:information-outline",
+            },
+            {
+                "id": "soh_status",
+                "name": "SOH Status",
+                "val_tpl": "{{ value_json.soh_status if value_json.soh_status is not none else '' }}",
+                "icon": "mdi:heart-pulse",
+            },
+            {
+                "id": "max_charge_current",
+                "name": "Max Charge Current",
+                "dev_cla": "current",
+                "stat_cla": "measurement",
+                "unit": "A",
+                "val_tpl": "{{ value_json.max_charge_current_a if value_json.max_charge_current_a is not none else '' }}",
+            },
+            {
+                "id": "max_discharge_current",
+                "name": "Max Discharge Current",
+                "dev_cla": "current",
+                "stat_cla": "measurement",
+                "unit": "A",
+                "val_tpl": "{{ value_json.max_discharge_current_a if value_json.max_discharge_current_a is not none else '' }}",
+            },
+            {
+                "id": "discharged_capacity",
+                "name": "Lifetime Discharged Capacity",
+                "stat_cla": "total_increasing",
+                "unit": "Ah",
+                "val_tpl": "{{ value_json.discharged_capacity_ah if value_json.discharged_capacity_ah is not none else '' }}",
+                "icon": "mdi:battery-arrow-down",
+            },
+            {
+                "id": "charge_count",
+                "name": "Charge Count",
+                "stat_cla": "total_increasing",
+                "val_tpl": "{{ value_json.charge_count if value_json.charge_count is not none else '' }}",
+                "icon": "mdi:counter",
+            },
+            {
+                "id": "discharge_count",
+                "name": "Discharge Count",
+                "stat_cla": "total_increasing",
+                "val_tpl": "{{ value_json.discharge_count if value_json.discharge_count is not none else '' }}",
+                "icon": "mdi:counter",
+            },
+            {
+                "id": "coc_times",
+                "name": "Charge Over-Current Events",
+                "stat_cla": "total_increasing",
+                "val_tpl": "{{ value_json.coc_times if value_json.coc_times is not none else '' }}",
+                "icon": "mdi:alert-circle-outline",
+            },
+            {
+                "id": "doc_times",
+                "name": "Discharge Over-Current Events",
+                "stat_cla": "total_increasing",
+                "val_tpl": "{{ value_json.doc_times if value_json.doc_times is not none else '' }}",
+                "icon": "mdi:alert-circle-outline",
+            },
+            {
+                "id": "sc_times",
+                "name": "Short Circuit Events",
+                "stat_cla": "total_increasing",
+                "val_tpl": "{{ value_json.sc_times if value_json.sc_times is not none else '' }}",
+                "icon": "mdi:alert-octagon-outline",
+            },
+            {
+                "id": "ht_count",
+                "name": "High Temp Events",
+                "stat_cla": "total_increasing",
+                "val_tpl": "{{ value_json.ht_count if value_json.ht_count is not none else '' }}",
+                "icon": "mdi:thermometer-alert",
+            },
+            {
+                "id": "lt_count",
+                "name": "Low Temp Events",
+                "stat_cla": "total_increasing",
+                "val_tpl": "{{ value_json.lt_count if value_json.lt_count is not none else '' }}",
+                "icon": "mdi:thermometer-alert",
+            },
+            {
+                "id": "lv_count",
+                "name": "Low Voltage Events",
+                "stat_cla": "total_increasing",
+                "val_tpl": "{{ value_json.lv_count if value_json.lv_count is not none else '' }}",
+                "icon": "mdi:battery-alert",
+            },
+            {
+                "id": "bv_state",
+                "name": "Balance Voltage State",
+                "val_tpl": "{{ value_json.bv_state if value_json.bv_state is not none else '' }}",
+                "icon": "mdi:information-outline",
+            },
+            {
+                "id": "bt_state",
+                "name": "Balance Temp State",
+                "val_tpl": "{{ value_json.bt_state if value_json.bt_state is not none else '' }}",
+                "icon": "mdi:information-outline",
+            },
         ]
 
         for s in unit_sensors:
@@ -462,7 +567,7 @@ class HomeAssistantDiscovery:
                 payload["icon"] = s["icon"]
             entities.append((topic, payload))
 
-        # Individual Cell Voltage Sensors (1 to cell_count, typically 15 for US2000)
+        # Individual Cell Voltage & Temperature Sensors (1 to cell_count, typically 15 for US2000)
         for cell_idx in range(1, cell_count + 1):
             c_id = f"cell_{cell_idx}_voltage"
             topic = f"{self.prefix}/sensor/{device_id}/{c_id}/config"
@@ -481,6 +586,23 @@ class HomeAssistantDiscovery:
                 "device": device_dict,
             }
             entities.append((topic, payload))
+
+            t_id = f"cell_{cell_idx}_temperature"
+            t_topic = f"{self.prefix}/sensor/{device_id}/{t_id}/config"
+            t_payload = {
+                "name": f"Unit {unit_id} Cell {cell_idx} Temperature",
+                "unique_id": f"{device_id}_{t_id}",
+                "state_topic": state_topic,
+                "value_template": f"{{{{ value_json.cell_temperatures_c[{cell_idx - 1}] if value_json.cell_temperatures_c | length >= {cell_idx} else '' }}}}",
+                "device_class": "temperature",
+                "state_class": "measurement",
+                "unit_of_measurement": "°C",
+                "availability_topic": self.avail_topic,
+                "payload_available": "online",
+                "payload_not_available": "offline",
+                "device": device_dict,
+            }
+            entities.append((t_topic, t_payload))
 
         # Unit Binary Sensors (Warnings / Faults)
         unit_binary_sensors = [

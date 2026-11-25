@@ -205,6 +205,39 @@ $$
         self.assertEqual(telemetry.unit_telemetries[1].total_capacity_ah, 50.0)
         self.assertEqual(telemetry.total_capacity_ah, 200.0)
 
+    def test_populates_stat_and_soh_and_info_details(self):
+        """poll_telemetry populates stat counters, soh_status, and current limits."""
+        info_full = SAMPLE_INFO_OUTPUT + "\nSpecification : 48V/50AH\nMax Charge Curr : 25000mA\nMax Dischg Curr : -50000mA\n"
+        soh_table = "Power 1. Battery Voltage SOHCount SOHStatus\n0 3302 0 Normal\n1 3303 0 Normal\n$$\n"
+        stat_full = "Device address 1.\nCYCLE Times : 87\nCharge Cnt. : 10\nDischarge Cnt. : 120\nDsg Cap : 4542819\nLV Cnt : 3\n$$\n"
+
+        def mock_send_command(cmd: str, timeout=None):
+            if cmd == "pwr":
+                return SAMPLE_PWR_8_UNITS
+            elif cmd.startswith("bat "):
+                return SAMPLE_BAT_OUTPUT
+            elif cmd.startswith("info"):
+                return info_full
+            elif cmd.startswith("soh "):
+                return soh_table
+            elif cmd.startswith("stat "):
+                return stat_full
+            return "$$"
+
+        self.client.send_command = mock_send_command
+
+        telemetry = self.client.poll_telemetry()
+        self.assertIsNotNone(telemetry)
+        u1 = telemetry.unit_telemetries[1]
+        self.assertEqual(u1.soh_status, "Normal")
+        self.assertEqual(u1.soh_abnormal_cells, 0)
+        self.assertEqual(u1.charge_count, 10)
+        self.assertEqual(u1.discharge_count, 120)
+        self.assertEqual(u1.discharged_capacity_ah, 4542.82)
+        self.assertEqual(u1.lv_count, 3)
+        self.assertEqual(u1.max_charge_current_a, 25.0)
+        self.assertEqual(u1.max_discharge_current_a, -50.0)
+
 
 if __name__ == "__main__":
     unittest.main()

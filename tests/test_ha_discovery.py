@@ -36,6 +36,11 @@ class TestHADiscovery(unittest.TestCase):
         self.assertIn("homeassistant/sensor/pylontech_unit_1/voltage/config", topics)
         self.assertIn("homeassistant/sensor/pylontech_unit_1/cell_1_voltage/config", topics)
         self.assertIn("homeassistant/sensor/pylontech_unit_1/cell_15_voltage/config", topics)
+        self.assertIn("homeassistant/sensor/pylontech_unit_1/cell_1_temperature/config", topics)
+        self.assertIn("homeassistant/sensor/pylontech_unit_1/cell_15_temperature/config", topics)
+        self.assertIn("homeassistant/sensor/pylontech_unit_1/discharged_capacity/config", topics)
+        self.assertIn("homeassistant/sensor/pylontech_unit_1/max_charge_current/config", topics)
+        self.assertIn("homeassistant/sensor/pylontech_unit_1/soh_status/config", topics)
         self.assertIn("homeassistant/binary_sensor/pylontech_unit_1/voltage_warning/config", topics)
 
         # Check Unit 4 entities

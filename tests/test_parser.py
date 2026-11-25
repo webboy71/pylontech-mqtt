@@ -8,7 +8,9 @@ from pylontech_mqtt.parser import (
     parse_bat_output,
     parse_info_output,
     parse_pwr_output,
+    parse_soh_details,
     parse_soh_output,
+    parse_stat_details,
     parse_stat_output,
 )
 
@@ -97,6 +99,9 @@ Comm version        : V2.0
 Serial Number       : PPTA012345678901
 Barcode             : PPTA012345678901
 Specification       : 48V/50AH
+Cell Number         : 15
+Max Charge Curr     : 25000mA
+Max Dischg Curr     : -50000mA
 Command completed successfully
 $$
 pylon>
@@ -154,6 +159,9 @@ CYCLE Times : 142
 Pwr Percent : 67
 Pwr Coulomb : 120297600
 Dsg Cap : 4542819
+HT Cnt : 0
+LT Cnt : 0
+LV Cnt : 17416
 Command completed successfully.
 $$
 pylon>
@@ -243,6 +251,11 @@ class TestParser(unittest.TestCase):
         self.assertEqual(info.serial_number, "PPTA012345678901")
         self.assertEqual(info.firmware_version, "B65.12")
         self.assertEqual(info.board_version, "PHOB01_V2.8")
+        self.assertEqual(info.boot_version, "V1.2")
+        self.assertEqual(info.comm_version, "V2.0")
+        self.assertEqual(info.cell_count, 15)
+        self.assertEqual(info.max_charge_current_a, 25.0)
+        self.assertEqual(info.max_discharge_current_a, -50.0)
         self.assertEqual(info.capacity_ah, 50.0)
 
     def test_parse_soh_output(self):
@@ -261,6 +274,25 @@ class TestParser(unittest.TestCase):
     def test_parse_stat_output(self):
         cycles = parse_stat_output(SAMPLE_STAT_OUTPUT, unit_id=1)
         self.assertEqual(cycles, 142)
+
+    def test_parse_stat_details(self):
+        details = parse_stat_details(SAMPLE_STAT_OUTPUT, unit_id=1)
+        self.assertEqual(details["cycle_count"], 142)
+        self.assertEqual(details["charge_count"], 0)
+        self.assertEqual(details["discharge_count"], 761)
+        self.assertEqual(details["discharged_capacity_ah"], 4542.82)
+        self.assertEqual(details["coc_times"], 0)
+        self.assertEqual(details["doc_times"], 0)
+        self.assertEqual(details["sc_times"], 0)
+        self.assertEqual(details["ht_count"], 0)
+        self.assertEqual(details["lt_count"], 0)
+        self.assertEqual(details["lv_count"], 17416)
+
+    def test_parse_soh_details(self):
+        details = parse_soh_details(SAMPLE_SOH_TABLE_OUTPUT, unit_id=1)
+        self.assertEqual(details["soh_percent"], 100.0)
+        self.assertEqual(details["soh_status"], "Normal")
+        self.assertEqual(details["soh_abnormal_cells"], 0)
 
     def test_aggregate_stack_telemetry(self):
         pwr_data = parse_pwr_output(SAMPLE_PWR_OUTPUT)
