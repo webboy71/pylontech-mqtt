@@ -111,6 +111,29 @@ $$
 pylon>
 """
 
+SAMPLE_SOH_TABLE_OUTPUT = """
+@
+Power 1. Battery  Voltage  SOHCount  SOHStatus
+0                 3302     0         Normal
+1                 3303     0         Normal
+2                 3303     0         Normal
+3                 3302     0         Normal
+4                 3303     0         Normal
+5                 3302     0         Normal
+6                 3303     0         Normal
+7                 3303     0         Normal
+8                 3303     0         Normal
+9                 3303     0         Normal
+10                3304     0         Normal
+11                3304     0         Normal
+12                3305     0         Normal
+13                3304     0         Normal
+14                3304     0         Normal
+Command completed successfully.
+$$
+pylon>
+"""
+
 SAMPLE_STAT_OUTPUT = """
 @
 Device address 1.
@@ -223,6 +246,15 @@ class TestParser(unittest.TestCase):
     def test_parse_soh_output(self):
         soh = parse_soh_output(SAMPLE_SOH_OUTPUT, unit_id=1)
         self.assertEqual(soh, 99.0)
+
+    def test_parse_soh_table_output(self):
+        soh = parse_soh_output(SAMPLE_SOH_TABLE_OUTPUT, unit_id=1)
+        self.assertEqual(soh, 100.0)
+
+    def test_parse_soh_table_output_with_abnormal_cell(self):
+        abnormal = SAMPLE_SOH_TABLE_OUTPUT.replace("6                 3303     0         Normal", "6                 3303     13        Abnormal")
+        soh = parse_soh_output(abnormal, unit_id=1)
+        self.assertEqual(soh, 93.3)
 
     def test_parse_stat_output(self):
         cycles = parse_stat_output(SAMPLE_STAT_OUTPUT, unit_id=1)

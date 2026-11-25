@@ -401,21 +401,63 @@ def parse_info_output(output: str, unit_id: int) -> UnitInfo:
 
 
 def parse_soh_output(output: str, unit_id: int) -> Optional[float]:
-    """Parse output of 'soh <unit_id>' command, returning SOH float or None."""
+    """
+    Parse output of 'soh <unit_id>' command, returning SOH float (0..100) or None.
+    Supports both key-value ('SOH: 99%') and Pylontech cell-table format
+    ('Battery  Voltage  SOHCount  SOHStatus').
+    """
     cleaned = clean_console_text(output)
+    table_header_found = False
+    status_col_idx = 3
+    total_cells = 0
+    normal_cells = 0
+
     for line in cleaned.splitlines():
+        line_stripped = line.strip()
+        if not line_stripped or line_stripped.startswith("@") or line_stripped.startswith("$$") or "pylon>" in line_stripped or "Command completed" in line_stripped:
+            continue
+
         # Match 'SOH: 99%' or 'SOH = 99%' or 'SOH: 99'
-        m = re.search(r"\bsoh\b\s*[:=]\s*(\d+)", line, re.IGNORECASE)
+        m = re.search(r"\bsoh\b\s*[:=]\s*(\d+)", line_stripped, re.IGNORECASE)
         if m:
             val = float(m.group(1))
             if 0 <= val <= 100:
                 return val
         # Also check for 'SOH 99%' pattern
-        m2 = re.search(r"\bsoh\b.*?(\d+)%", line, re.IGNORECASE)
-        if m2 and not line.strip().lower().startswith("soh "):
+        m2 = re.search(r"\bsoh\b.*?(\d+)%", line_stripped, re.IGNORECASE)
+        if m2 and not line_stripped.lower().startswith("soh "):
             val = float(m2.group(1))
             if 0 <= val <= 100:
                 return val
+
+        # Detect Pylontech 'soh <id>' table header:
+        # e.g. "Power 1. Battery  Voltage  SOHCount  SOHStatus"
+        # or   "Battery | Voltage | SOHCount | SOHStatus"
+        if "|" in line_stripped:
+            tokens = [t.strip() for t in line_stripped.split("|") if t.strip()]
+        else:
+            tokens = [t.strip() for t in re.split(r"\s+", line_stripped) if t.strip() and t.strip() != "-"]
+
+        lower_tokens = [t.lower() for t in tokens]
+        if not table_header_found and "sohstatus" in lower_tokens:
+            table_header_found = True
+            # On data rows, columns are [cell_idx, voltage, soh_count, soh_status]
+            # Header may have leading "Power 1." prefix, so find offset from "battery"
+            if "battery" in lower_tokens:
+                bat_idx = lower_tokens.index("battery")
+                status_col_idx = lower_tokens.index("sohstatus") - bat_idx
+            else:
+                status_col_idx = 3
+            continue
+
+        if table_header_found and tokens and tokens[0].isdigit():
+            if len(tokens) > status_col_idx:
+                total_cells += 1
+                if tokens[status_col_idx].lower() == "normal":
+                    normal_cells += 1
+
+    if total_cells > 0:
+        return round(100.0 * normal_cells / total_cells, 1)
     return None
 
 
