@@ -238,6 +238,16 @@ $$
         self.assertEqual(u1.max_charge_current_a, 25.0)
         self.assertEqual(u1.max_discharge_current_a, -50.0)
 
+    def test_fetch_bms_logs(self):
+        """fetch_bms_logs queries 'log' and 'datalist event 0'."""
+        def mock_send_command(cmd: str, timeout=None):
+            return f"output for {cmd}"
+
+        self.client.send_command = mock_send_command
+        logs = self.client.fetch_bms_logs()
+        self.assertEqual(logs["log"], "output for log")
+        self.assertEqual(logs["datalist event 0"], "output for datalist event 0")
+
 
 if __name__ == "__main__":
     unittest.main()

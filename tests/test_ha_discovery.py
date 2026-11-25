@@ -30,10 +30,14 @@ class TestHADiscovery(unittest.TestCase):
         self.assertIn("homeassistant/sensor/pylontech_battery_stack/total_power/config", topics)
         self.assertIn("homeassistant/sensor/pylontech_battery_stack/soc/config", topics)
         self.assertIn("homeassistant/sensor/pylontech_battery_stack/cell_delta/config", topics)
+        self.assertIn("homeassistant/sensor/pylontech_battery_stack/last_event/config", topics)
         self.assertIn("homeassistant/binary_sensor/pylontech_battery_stack/is_charging/config", topics)
 
         # Check Unit 1 entities
         self.assertIn("homeassistant/sensor/pylontech_unit_1/voltage/config", topics)
+        self.assertIn("homeassistant/sensor/pylontech_unit_1/highest_cell/config", topics)
+        self.assertIn("homeassistant/sensor/pylontech_unit_1/lowest_cell/config", topics)
+        self.assertIn("homeassistant/sensor/pylontech_unit_1/last_voltage_event/config", topics)
         self.assertIn("homeassistant/sensor/pylontech_unit_1/cell_1_voltage/config", topics)
         self.assertIn("homeassistant/sensor/pylontech_unit_1/cell_15_voltage/config", topics)
         self.assertIn("homeassistant/sensor/pylontech_unit_1/cell_1_temperature/config", topics)
@@ -106,6 +110,42 @@ class TestHADiscovery(unittest.TestCase):
         # Should not contain Unit 1..4
         self.assertNotIn("homeassistant/sensor/pylontech_unit_1/voltage/config", topics)
         self.assertNotIn("homeassistant/sensor/pylontech_unit_4/voltage/config", topics)
+
+    def test_mqtt_publisher_logs_overvoltage_events(self):
+        from unittest.mock import MagicMock
+        from pylontech_mqtt.mqtt_publisher import MQTTPublisher
+        from pylontech_mqtt.parser import BatteryTelemetry, StackTelemetry
+
+        config = AppConfig()
+        pub = MQTTPublisher(config)
+        pub._connected = True
+        pub._discovery_published = True
+        pub._client = MagicMock()
+
+        unit1 = BatteryTelemetry(
+            unit_id=1,
+            voltage_v=52.5,
+            soc_percent=82.0,
+            volt_low_mv=3340.0,
+            volt_high_mv=3582.0,
+            cell_delta_mv=242.0,
+            voltage_state="OV",
+            highest_cell="Cell 07 (3582mV)",
+            lowest_cell="Cell 02 (3340mV)",
+        )
+        stack = StackTelemetry(unit_telemetries={1: unit1})
+
+        pub.publish_telemetry(stack)
+
+        published = {call.args[0]: json.loads(call.args[1]) for call in pub._client.publish.call_args_list}
+        events_payload = published["pylontech/stack/events"]
+        self.assertIn("Unit 1 OV @ 82% SoC", events_payload["last_event"])
+        self.assertIn("Cell 07 (3582mV)", events_payload["last_event"])
+        self.assertEqual(events_payload["event_count"], 1)
+        self.assertEqual(len(events_payload["events"]), 1)
+
+        unit_payload = published["pylontech/unit/1/state"]
+        self.assertIn("Unit 1 OV @ 82% SoC", unit_payload["last_voltage_event"])
 
 
 if __name__ == "__main__":

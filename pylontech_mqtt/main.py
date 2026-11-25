@@ -71,6 +71,7 @@ class PylontechDaemon:
                             telemetry.soc_percent,
                             telemetry.stack_state,
                         )
+                        self._log_cell_diagnostics(telemetry)
                         self.mqtt_publisher.publish_telemetry(telemetry)
                     else:
                         logger.warning("No telemetry received. Retrying in %ds...", int(self.config.serial.reconnect_delay))
@@ -89,6 +90,52 @@ class PylontechDaemon:
     def stop(self) -> None:
         """Signal the daemon to stop."""
         self._running = False
+
+    def _log_cell_diagnostics(self, telemetry: object) -> None:
+        """Log detailed per-unit diagnostics when over-voltage, high cell voltage, or large cell delta occurs."""
+        for u_id, u in getattr(telemetry, "unit_telemetries", {}).items():
+            volt_abnormal = u.voltage_state.lower() not in ("normal", "idle", "")
+            high_cell = u.volt_high_mv >= 3500.0
+            high_delta = u.cell_delta_mv >= 50.0
+            if not (volt_abnormal or high_cell or high_delta):
+                continue
+
+            cell_detail = ""
+            if u.cell_voltages_mv:
+                max_v = max(u.cell_voltages_mv)
+                min_v = min(u.cell_voltages_mv)
+                max_idx = u.cell_voltages_mv.index(max_v) + 1
+                min_idx = u.cell_voltages_mv.index(min_v) + 1
+                cell_detail = f" | HighCell=Cell {max_idx:02d} ({max_v:.0f}mV), LowCell=Cell {min_idx:02d} ({min_v:.0f}mV)"
+
+            logger.warning(
+                "Unit %d voltage diagnostic: Volt.St=%s | Pack=%.2fV | Curr=%.2fA | SoC=%.0f%% | Vlow=%.0fmV | Vhigh=%.0fmV | Delta=%.0fmV%s",
+                u_id,
+                u.voltage_state,
+                u.voltage_v,
+                u.current_a,
+                u.soc_percent,
+                u.volt_low_mv,
+                u.volt_high_mv,
+                u.cell_delta_mv,
+                cell_detail,
+            )
+
+    def dump_events(self) -> bool:
+        """Connect to serial, print BMS event/fault logs ('log' and 'datalist event 0'), and exit."""
+        if not self.serial_client.connect():
+            logger.error("Could not connect to serial port %s", self.config.serial.port)
+            return False
+        try:
+            logs = self.serial_client.fetch_bms_logs()
+            for cmd, output in logs.items():
+                print("\n" + "=" * 60)
+                print(f"  COMMAND: {cmd}")
+                print("=" * 60)
+                print(output.strip() or "(empty)")
+            return True
+        finally:
+            self.serial_client.disconnect()
 
     def _cleanup(self) -> None:
         """Clean up connections."""
@@ -152,6 +199,7 @@ def main() -> None:
     parser.add_argument("-p", "--port", help="Serial port (e.g. /dev/ttyUSB0)", default=None)
     parser.add_argument("-m", "--mqtt-host", help="MQTT broker IP address or hostname", default=None)
     parser.add_argument("--test", action="store_true", help="Run once in test mode and print output without loop")
+    parser.add_argument("--dump-events", action="store_true", help="Print BMS event/fault logs ('log', 'datalist event 0') and exit")
     parser.add_argument("--debug", action="store_true", help="Enable verbose debug logging")
 
     args = parser.parse_args()
@@ -175,6 +223,9 @@ def main() -> None:
     daemon = PylontechDaemon(config)
     if args.test:
         success = daemon.run_once()
+        sys.exit(0 if success else 1)
+    elif args.dump_events:
+        success = daemon.dump_events()
         sys.exit(0 if success else 1)
     else:
         daemon.start()

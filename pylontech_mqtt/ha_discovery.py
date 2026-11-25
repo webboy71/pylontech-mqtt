@@ -21,6 +21,9 @@ class HomeAssistantDiscovery:
     def get_stack_state_topic(self) -> str:
         return f"{self.topic_prefix}/stack/state"
 
+    def get_stack_events_topic(self) -> str:
+        return f"{self.topic_prefix}/stack/events"
+
     def get_unit_state_topic(self, unit_id: int) -> str:
         return f"{self.topic_prefix}/unit/{unit_id}/state"
 
@@ -282,6 +285,25 @@ class HomeAssistantDiscovery:
             if "icon" in bs:
                 payload["icon"] = bs["icon"]
             entities.append((topic, payload))
+
+        # Stack Last Event / Rolling Event Log Sensor
+        events_topic = self.get_stack_events_topic()
+        entities.append((
+            f"{self.prefix}/sensor/{device_id}/last_event/config",
+            {
+                "name": "Pylontech Stack Last Event",
+                "unique_id": f"{device_id}_last_event",
+                "state_topic": events_topic,
+                "value_template": "{{ value_json.last_event }}",
+                "json_attributes_topic": events_topic,
+                "json_attributes_template": "{{ value_json | tojson }}",
+                "icon": "mdi:text-box-outline",
+                "availability_topic": self.avail_topic,
+                "payload_available": "online",
+                "payload_not_available": "offline",
+                "device": device_dict,
+            },
+        ))
 
         return entities
 
@@ -569,6 +591,24 @@ class HomeAssistantDiscovery:
                 "name": "Balance Temp State",
                 "val_tpl": "{{ value_json.bt_state if value_json.bt_state is not none else '' }}",
                 "icon": "mdi:information-outline",
+            },
+            {
+                "id": "highest_cell",
+                "name": "Highest Cell",
+                "val_tpl": "{{ value_json.highest_cell if value_json.highest_cell is not none else '' }}",
+                "icon": "mdi:battery-arrow-up-outline",
+            },
+            {
+                "id": "lowest_cell",
+                "name": "Lowest Cell",
+                "val_tpl": "{{ value_json.lowest_cell if value_json.lowest_cell is not none else '' }}",
+                "icon": "mdi:battery-arrow-down-outline",
+            },
+            {
+                "id": "last_voltage_event",
+                "name": "Last Voltage Event",
+                "val_tpl": "{{ value_json.last_voltage_event if value_json.last_voltage_event is not none else 'OK' }}",
+                "icon": "mdi:text-box-outline",
             },
         ]
 

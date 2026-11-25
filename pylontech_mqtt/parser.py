@@ -68,6 +68,9 @@ class BatteryTelemetry:
     total_capacity_ah: Optional[float] = None
     cell_voltages_mv: List[float] = field(default_factory=list)
     cell_temperatures_c: List[float] = field(default_factory=list)
+    highest_cell: Optional[str] = None
+    lowest_cell: Optional[str] = None
+    last_voltage_event: Optional[str] = None
     bms_temperature_c: Optional[float] = None
     last_update: Optional[float] = None
 

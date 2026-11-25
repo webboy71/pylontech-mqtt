@@ -30,6 +30,10 @@ class MQTTPublisher:
         self._connected = False
         self._discovery_published = False
         self._status_topic = f"{self.mqtt_cfg.topic_prefix}/status"
+        self._event_log: list[str] = []
+        self._last_event_summary: str = "OK"
+        self._last_event_time: float = 0.0
+        self._unit_last_events: dict[int, str] = {}
 
     @property
     def is_connected(self) -> bool:
@@ -211,10 +215,44 @@ class MQTTPublisher:
         self._client.publish(stack_topic, json.dumps(stack_dict), qos=0, retain=False)
 
         # 2. Publish Individual Unit States
+        now = time.time()
+        ts_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now))
         for unit_id, unit_telem in stack.unit_telemetries.items():
+            volt_abnormal = unit_telem.voltage_state.lower() not in ("normal", "idle", "")
+            high_cell = unit_telem.volt_high_mv >= 3500.0
+            high_delta = unit_telem.cell_delta_mv >= 50.0
+            if volt_abnormal or high_cell or high_delta:
+                high_desc = unit_telem.highest_cell or f"Vhigh={unit_telem.volt_high_mv:.0f}mV"
+                summary = (
+                    f"Unit {unit_id} {unit_telem.voltage_state} @ {unit_telem.soc_percent:.0f}% SoC | "
+                    f"{high_desc} | Delta={unit_telem.cell_delta_mv:.0f}mV"
+                )[:255]
+                entry = f"{ts_str} | {summary}"
+                self._unit_last_events[unit_id] = entry[:255]
+                if summary != self._last_event_summary or (now - self._last_event_time) >= 60.0:
+                    self._last_event_summary = summary
+                    self._last_event_time = now
+                    self._event_log.insert(0, entry)
+                    self._event_log = self._event_log[:30]
+
             unit_dict = dataclasses.asdict(unit_telem)
-            unit_dict["timestamp"] = int(time.time())
+            unit_dict["last_voltage_event"] = self._unit_last_events.get(unit_id, "OK")
+            unit_dict["timestamp"] = int(now)
             unit_topic = self.discovery.get_unit_state_topic(unit_id)
             self._client.publish(unit_topic, json.dumps(unit_dict), qos=0, retain=False)
+
+        # 3. Publish Stack Event Log (retained so HA keeps latest event across restarts)
+        events_payload = {
+            "last_event": self._last_event_summary[:255],
+            "event_count": len(self._event_log),
+            "events": self._event_log,
+            "timestamp": int(now),
+        }
+        self._client.publish(
+            self.discovery.get_stack_events_topic(),
+            json.dumps(events_payload),
+            qos=0,
+            retain=True,
+        )
 
         logger.debug("Published telemetry for Stack and %d units.", len(stack.unit_telemetries))

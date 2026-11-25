@@ -90,6 +90,20 @@ class PylontechSerialClient:
         logger.info("Disconnecting serial port...")
         self._close()
 
+    def fetch_bms_logs(self) -> Dict[str, str]:
+        """Fetch raw BMS event/fault logs ('log' and 'datalist event 0')."""
+        if not self.is_connected:
+            if not self.connect():
+                return {}
+
+        logs: Dict[str, str] = {}
+        for cmd in ("log", "datalist event 0"):
+            try:
+                logs[cmd] = self.send_command(cmd, timeout=max(self.serial_cfg.timeout, 5.0))
+            except Exception as e:
+                logs[cmd] = f"Error running '{cmd}': {e}"
+        return logs
+
     def _sync_prompt(self) -> None:
         """Send newline to wake/synchronize the console prompt."""
         if not self._serial:
@@ -246,6 +260,12 @@ class PylontechSerialClient:
                         bat_dict = parse_bat_output(raw_bat, u_id)
                         if bat_dict.get("cell_voltages_mv"):
                             u_telem.cell_voltages_mv = bat_dict["cell_voltages_mv"]
+                            max_v = max(u_telem.cell_voltages_mv)
+                            min_v = min(u_telem.cell_voltages_mv)
+                            max_idx = u_telem.cell_voltages_mv.index(max_v) + 1
+                            min_idx = u_telem.cell_voltages_mv.index(min_v) + 1
+                            u_telem.highest_cell = f"Cell {max_idx:02d} ({max_v:.0f}mV)"
+                            u_telem.lowest_cell = f"Cell {min_idx:02d} ({min_v:.0f}mV)"
                         if bat_dict.get("cell_temperatures_c"):
                             u_telem.cell_temperatures_c = bat_dict["cell_temperatures_c"]
                         if bat_dict.get("bms_temperature_c") is not None:
